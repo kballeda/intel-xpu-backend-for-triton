@@ -87,7 +87,7 @@ void init_triton_runtime(py::module &&m) {
       .value("SPIRV", SPIRV)
       .export_values();
 
-  py::enum_<mlir::triton::Target>(m, "TARGET")
+  py::enum_<mlir::triton::Target>(m, "TARGET", py::module_local())
       .value("NVVM", mlir::triton::Target::NVVM)
       .value("ROCDL", mlir::triton::Target::ROCDL)
       .value("GENX", mlir::triton::Target::GENX)
@@ -578,6 +578,32 @@ void init_triton_ir(py::module &&m) {
         module->walk([](mlir::Operation *op) {
           op->setLoc(mlir::UnknownLoc::get(op->getContext()));
         });
+
+        return module->clone();
+      },
+      ret::take_ownership);
+
+  m.def(
+      "parse_mlir_source",
+      [](const std::string &mlir, mlir::MLIRContext &context) {
+        // initialize registry
+        // note: we initialize llvm for undef
+        mlir::DialectRegistry registry;
+        registry.insert<
+            mlir::triton::TritonDialect, mlir::triton::gpu::TritonGPUDialect,
+            mlir::triton::nvidia_gpu::TritonNvidiaGPUDialect,
+            mlir::triton::nvgpu::NVGPUDialect, mlir::math::MathDialect,
+            mlir::arith::ArithDialect, mlir::index::IndexDialect,
+            mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect,
+            mlir::LLVM::LLVMDialect>();
+        context.appendDialectRegistry(registry);
+        context.loadAllAvailableDialects();
+
+        // parse module
+        mlir::OwningOpRef<mlir::ModuleOp> module =
+            mlir::parseSourceString<mlir::ModuleOp>(mlir, &context);
+        if (!module)
+          throw std::runtime_error("Parse MLIR file failed.");
 
         return module->clone();
       },
@@ -1814,7 +1840,8 @@ void init_triton_env_vars(py::module &m) {
 void init_triton_translation(py::module &m) {
   using ret = py::return_value_policy;
 
-  py::class_<mlir::triton::nvidia_gpu::ClusterInfo>(m, "ClusterInfo")
+  py::class_<mlir::triton::nvidia_gpu::ClusterInfo>(m, "ClusterInfo",
+                                                    py::module_local())
       .def(py::init<>())
       .def_readwrite("clusterDimX",
                      &mlir::triton::nvidia_gpu::ClusterInfo::clusterDimX)
@@ -1829,7 +1856,7 @@ void init_triton_translation(py::module &m) {
         return oss.str();
       });
 
-  py::class_<mlir::triton::gpu::TMAInfo>(m, "TMAInfo")
+  py::class_<mlir::triton::gpu::TMAInfo>(m, "TMAInfo", py::module_local())
       .def(py::init<>())
       .def_readwrite("tensorDataType",
                      &mlir::triton::gpu::TMAInfo::tensorDataType)
@@ -1866,6 +1893,12 @@ void init_triton_translation(py::module &m) {
     }
 
     return num_warps;
+  });
+  m.def("get_threads_per_warp", [](mlir::ModuleOp mod) {
+    auto threads_per_warp =
+        mod->getAttrOfType<mlir::IntegerAttr>("triton_gpu.threads-per-warp");
+    assert(threads_per_warp);
+    return threads_per_warp.getInt();
   });
 
   m.def(

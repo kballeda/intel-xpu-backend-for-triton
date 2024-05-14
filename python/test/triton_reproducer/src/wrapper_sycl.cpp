@@ -234,7 +234,27 @@ template <typename T>
 T* tritonReproducer::setupBuffers(int vidx) {
     auto host_mem = this->file_ops<T>(this->argInfo[vidx + 2]);
     auto dev_mem = this->allocateDevBuffer<T>(host_mem.size());
-    this->host2device<T>(dev_mem, host_mem.data(), sizeof(T) * host_mem.size());
+    auto arrType = stoi(this->argInfo[vidx + 3]);
+    auto typeStr = boost::typeindex::type_id_with_cvr<T>().pretty_name();
+    //std::cout << typeStr << std::endl;
+    // If this buffer is a output buffer 
+    if (arrType) {
+        this->dev_output = dev_mem;
+        this->host_output_size = host_mem.size();
+        auto typeStr = boost::typeindex::type_id_with_cvr<T>().pretty_name();
+        if (typeStr == "float")
+            this->type = FLOAT;
+        else if (typeStr == "integer")
+            this->type = INTEGER;
+        else if (typeStr == "sycl::_V1::detail::half_impl::half")
+            this->type = HALF;
+        else if (typeStr == "double")
+            this->type = DOUBLE;
+        else if (typeStr == "long")
+            this->type = LONG;
+    } else {
+        this->host2device<T>(dev_mem, host_mem.data(), sizeof(T) * host_mem.size());
+    }
     return dev_mem;
 }
 
@@ -282,17 +302,34 @@ int main(int argc, char **argv) {
                 } else if (tr.argInfo[vidx + 1] == "half") {
                     auto dev_mem = tr.setupBuffers<sycl::half>(vidx);
                     cgh.set_arg(narg++, dev_mem);
-                }
+                } else if (tr.argInfo[vidx + 1] == "int") {
+                    auto dev_mem = tr.setupBuffers<int>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "long") {
+                    auto dev_mem = tr.setupBuffers<int>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "int64") {
+                    auto dev_mem = tr.setupBuffers<int64_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "uint32") {
+                    auto dev_mem = tr.setupBuffers<uint32_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "uint64") {
+                    auto dev_mem = tr.setupBuffers<uint64_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } 
             }
 
             if (tr.argInfo[vidx] == "Var") {
                 std::cout << tr.argInfo[vidx] << std::endl;
                 if (tr.argInfo[vidx + 1] == "float") {
                     float arg = stof(tr.argInfo[vidx + 2]);
+                    std::cout << arg << std::endl;
                     cgh.set_arg(narg++, arg);
                 }
                 if (tr.argInfo[vidx + 1] == "int") {
                     int arg = stoi(tr.argInfo[vidx + 2]);
+                    std::cout << arg << std::endl;
                     cgh.set_arg(narg++, arg);
                 }
             }
@@ -309,6 +346,7 @@ int main(int argc, char **argv) {
                 gridZ = stoi(tr.argInfo[vidx + 3]);
                 num_warps = stoi(tr.argInfo[vidx + 4]);
                 threads_per_warp = stoi(tr.argInfo[vidx + 5]);
+                std::cout << gridX << " " << gridY << " " << gridZ << " " << num_warps << " " << threads_per_warp << std::endl;
                 vidx += 2;
             }
             vidx += 4;
@@ -339,80 +377,3 @@ int main(int argc, char **argv) {
     }
     std::cout << "total elements" << tr.host_output_size << " " << idx << std::endl;
 }
-
-
-#if 0
-    int arg3 = 128;
-    int arg4 = 256;
-    int arg5 = 32;
-    int arg6 = 32;
-    int arg7 = 256;
-    int arg8 = 256;
-    int shared_memory = 32768;
-    auto a_vec = tr.file_ops<sycl::half>("./data/a.bin");
-    auto b_vec = tr.file_ops<sycl::half>("./data/b.bin");
-    auto th_vec = tr.file_ops<float>("./data/th.bin");
-    auto tt_vec = tr.file_ops<float>("./data/tt.bin");
-    auto host_c = std::vector<float>(th_vec.size());
-
-    auto a_size_in_bytes = a_vec.size() * sizeof(sycl::half);
-    auto b_size_in_bytes = b_vec.size() * sizeof(sycl::half);
-    auto th_size_in_bytes = th_vec.size() * sizeof(float);
-    auto tt_size_in_bytes = tt_vec.size() * sizeof(float);
-
-    // SYCL Code Start
-    std::cout << "Using spvFileName: " << tr.spvFileName << std::endl;
-    auto kernel = tr.createKernel();
-
-    // Device/Host memory
-    auto A = tr.allocateDevBuffer<sycl::half>(a_vec.size());
-    auto B = tr.allocateDevBuffer<sycl::half>(b_vec.size());
-    auto C = tr.allocateDevBuffer<float>(host_c.size());
-
-    // H2D transfer of A & B
-    tr.host2device<sycl::half>(A, a_vec.data(), sizeof(sycl::half) * a_vec.size());
-    tr.host2device<sycl::half>(B, b_vec.data(), sizeof(sycl::half) * b_vec.size());
-
-    uint32_t gridX = 1, gridY = 1, gridZ = 1;
-    int num_warps = 8, threads_per_warp = 32;
-
-    auto parallel_work_size = tr.gridConfig(gridX, gridY, gridZ, num_warps, threads_per_warp);
-
-    // Submit the imported kernel
-    tr.getQueue().submit([&](sycl::handler &cgh) {
-        using share_mem_t = sycl::local_accessor<int8_t, 1>;
-        share_mem_t local_buffer = share_mem_t(shared_memory, cgh);
-        cgh.set_args(A,B,C,arg3, arg4, arg5, arg6, arg7, arg8, local_buffer);
-        cgh.parallel_for(parallel_work_size, kernel);
-    });
-    tr.getQueue().wait();
-
-    // D2H - Transfer of C
-    tr.device2host<float>(C, host_c.data(), host_c.size() * sizeof(float));
-    // SYCL Code End 
-
-    std::cout << "\nTest Matmul Results: \n" << std::endl;
-    int idx = 0;
-    for (const auto& num : host_c) {
-        if (num == th_vec[idx]) { 
-#ifdef VERBOSE 
-        std::cout << std::fixed << std::setprecision(5);
-        std::cout << "Index = " << idx << " TT_Reproducer =  " << num << " Torch_Python = " << th_vec[idx] << " Triton_Python = " << tt_vec[idx] << std::endl;
-#endif
-            idx++;
-        } else {
-            std::cout << std::fixed << std::setprecision(5);
-            std::cout << "Index = " << idx << " TT_Reproducer =  " << num << " Torch_Python = " << th_vec[idx] << " Triton_Python = " << tt_vec[idx] << std::endl;
-            break;
-        }
-    }
-    fflush(stdout);
-
-    std::cout << "Results Matrix [" << host_c.size() << "] : "<< idx << " Reproducer Results Matched " << std::endl;
-
-    sycl::free(A, tr.getQueue());
-    sycl::free(B, tr.getQueue());
-    sycl::free(C, tr.getQueue());
-
-    return 0;
-#endif

@@ -19,6 +19,8 @@
 #include <variant>
 #include <fstream>
 #include <sstream>
+#include <cstdint>
+#include <boost/type_index.hpp>
 
 
 #define check(ans)                                                             \
@@ -35,6 +37,8 @@ enum DataType{
   FLOAT,
   HALF,
   STRING,
+  DOUBLE,
+  LONG
 };
 
 class tritonReproducer {

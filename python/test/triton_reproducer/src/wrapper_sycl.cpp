@@ -261,10 +261,6 @@ int main(int argc, char **argv) {
     uint32_t gridX = 0, gridY = 0, gridZ = 0;
     int num_warps = 0, threads_per_warp = 0;
 
-    void *dev_output;
-    size_t size;
-    enum DataType type;
-
     // Submit the imported kernel
     tr.getQueue().submit([&](sycl::handler &cgh) {
         int vidx = 0;
@@ -276,14 +272,13 @@ int main(int argc, char **argv) {
                 if (tr.argInfo[vidx + 1] == "float") {
                     auto dev_mem = tr.setupBuffers<float>(vidx);
                     cgh.set_arg(narg++, dev_mem);
-                #if 1
                     auto arrType = stoi(tr.argInfo[vidx + 3]);
-                    if (arrType == 1) {
-                        dev_output = dev_mem;
-                        size = 32768;
-                        type = FLOAT;
+                    // If this buffer is a output buffer 
+                    if (arrType) {
+                        tr.dev_output = dev_mem;
+                        tr.host_output_size = 32768;
+                        tr.type = FLOAT;
                     }
-                #endif
                 } else if (tr.argInfo[vidx + 1] == "half") {
                     auto dev_mem = tr.setupBuffers<sycl::half>(vidx);
                     cgh.set_arg(narg++, dev_mem);
@@ -323,25 +318,26 @@ int main(int argc, char **argv) {
     });
     tr.getQueue().wait();
 
-    void *host_mem;
-    if (type == FLOAT) {
-        host_mem = (float*) malloc(size * sizeof(float));
-        auto devData = (float*)dev_output;
+    // Get output from the device memory.
+    if (tr.type == FLOAT) {
+        tr.host_output = (float*) malloc(tr.host_output_size * sizeof(float));
+        auto devData = (float*)tr.dev_output;
         // D2H - Transfer of C
-        tr.device2host<float>(devData, (float*)host_mem, size * sizeof(float));
+        tr.device2host<float>(devData, (float*)tr.host_output, tr.host_output_size * sizeof(float));
     }
-    auto host_output = tr.file_ops<float>("./data/th.bin");
-    float *ptr = (float*)host_mem;
+
+    auto torch_output = tr.file_ops<float>("./data/th.bin");
+    float *ptr = (float*)tr.host_output;
     int idx = 0;
-    for (int i = 0; i < size; i++) {
-        if (ptr[i] == host_output[i])
+    for (int i = 0; i < tr.host_output_size; i++) {
+        if (ptr[i] == torch_output[i])
             idx++;
         else {
             std::cout << "Mismatch Occured at " << i << std::endl;
             break;
         }
     }
-    std::cout << "total elements" << size << " " << idx << std::endl;
+    std::cout << "total elements" << tr.host_output_size << " " << idx << std::endl;
 }
 
 

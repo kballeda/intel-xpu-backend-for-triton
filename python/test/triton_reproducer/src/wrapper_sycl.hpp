@@ -61,6 +61,11 @@ class tritonReproducer {
         void readArguments(void);
         std::string spvFileName = "./spirv-bins/good.spv";
         std::vector<std::string> argInfo;
+        void *dev_output;
+        size_t host_output_size;
+        enum DataType type;
+        void *host_output;
     private:
         sycl::queue tr_queue;
+
 };

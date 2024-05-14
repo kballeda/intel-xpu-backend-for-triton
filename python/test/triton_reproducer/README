@@ -1,0 +1,36 @@
+Overview
+~~~~~~~~
+
+# This reproducer reads good/bad SPV files provided in dumps.tar (GSD-7949) and launches the SYCL kernel in C++.
+
+
+Environment
+~~~~~~~~~~
+    1. source /opt/intel/oneAPI/2024.0.0/setvars.sh 
+    2. Set PATH variable pointing to Intel Level Zero headers
+
+Directories
+-----------
+
+data       - This directory contains all the binary files (.bin) consisting of input/output array binary data dumped from Triton backend 
+             [Arrays: a, b, Torch_output, Triton_output]
+src        - This directory contains all the source files 
+spirv-bins - This directory contains SPIRV binary dumps from Triton, these files contains actual kernels in encrypted form.
+             good.spv   - Picked from GSD-7949/dumps.tar/good directory
+             bad.spv    - Picked from GSD-7949/dumps.tar/bad directory
+
+Reproducer [GSD-7949]
+---------------------
+make            - By default it builds the tritonspvc++.exe (Reproducer for GSD7949)
+                  It utilizes the input data of a/b/torch output (th.bin)/Triton output (tt.bin) from data directory
+                  It picks SPIR-V kernel binary from spirv-bins directory underwhich good.spv and bad.spv are present.
+
+make VERBOSE=1  - Enables logging of Output Results
+
+make DEBUG=1    - Enables debug mode
+
+
+Usage:
+
+./tritonspvc++.exe [By default it picsk good.spv and produces correct results in comparison with Triton/Torch]
+./tritonspvc++.exe --spv ./spirv-bins/bad.spv [Produces wrong results in comparison with Torch]

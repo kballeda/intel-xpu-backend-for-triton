@@ -296,17 +296,10 @@ int main(int argc, char **argv) {
         int narg = 0;
         while (vidx < tr.argInfo.size()) {
             if (tr.argInfo[vidx] == "Array") {
-                std::cout << tr.argInfo[vidx] << std::endl;
+                //std::cout << tr.argInfo[vidx] << std::endl;
                 if (tr.argInfo[vidx + 1] == "float") {
                     auto dev_mem = tr.setupBuffers<float>(vidx);
                     cgh.set_arg(narg++, dev_mem);
-                    auto arrType = stoi(tr.argInfo[vidx + 3]);
-                    // If this buffer is a output buffer 
-                    if (arrType) {
-                        tr.dev_output = dev_mem;
-                        tr.host_output_size = 32768;
-                        tr.type = FLOAT;
-                    }
                 } else if (tr.argInfo[vidx + 1] == "half") {
                     auto dev_mem = tr.setupBuffers<sycl::half>(vidx);
                     cgh.set_arg(narg++, dev_mem);
@@ -329,15 +322,25 @@ int main(int argc, char **argv) {
             }
 
             if (tr.argInfo[vidx] == "Var") {
-                std::cout << tr.argInfo[vidx] << std::endl;
+                //std::cout << tr.argInfo[vidx] << std::endl;
                 if (tr.argInfo[vidx + 1] == "float") {
-                    float arg = stof(tr.argInfo[vidx + 2]);
-                    std::cout << arg << std::endl;
+                    auto arg = stof(tr.argInfo[vidx + 2]);
+                    //std::cout << arg << std::endl;
                     cgh.set_arg(narg++, arg);
                 }
                 if (tr.argInfo[vidx + 1] == "int") {
-                    int arg = stoi(tr.argInfo[vidx + 2]);
-                    std::cout << arg << std::endl;
+                    auto arg = stoi(tr.argInfo[vidx + 2]);
+                    //std::cout << arg << std::endl;
+                    cgh.set_arg(narg++, arg);
+                }
+
+                if (tr.argInfo[vidx + 1] == "long") {
+                    auto arg = stol(tr.argInfo[vidx + 2]);
+                    cgh.set_arg(narg++, arg);
+                }
+
+                if (tr.argInfo[vidx + 1] == "double") {
+                    auto arg = stod(tr.argInfo[vidx + 2]);
                     cgh.set_arg(narg++, arg);
                 }
             }
@@ -354,7 +357,7 @@ int main(int argc, char **argv) {
                 gridZ = stoi(tr.argInfo[vidx + 3]);
                 num_warps = stoi(tr.argInfo[vidx + 4]);
                 threads_per_warp = stoi(tr.argInfo[vidx + 5]);
-                std::cout << gridX << " " << gridY << " " << gridZ << " " << num_warps << " " << threads_per_warp << std::endl;
+                //std::cout << gridX << " " << gridY << " " << gridZ << " " << num_warps << " " << threads_per_warp << std::endl;
                 vidx += 2;
             }
             vidx += 4;
@@ -388,5 +391,5 @@ int main(int argc, char **argv) {
             break;
         }
     }
-    std::cout << "total elements" << tr.host_output_size << " " << idx << std::endl;
+    std::cout << " Total Elements = " << torch_output.size() << " Total Matched Elements = " << idx << "/" << tr.host_output_size << std::endl;
 }

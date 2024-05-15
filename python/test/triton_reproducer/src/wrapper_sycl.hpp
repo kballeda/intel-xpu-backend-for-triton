@@ -73,5 +73,4 @@ class tritonReproducer {
         void *host_output;
     private:
         sycl::queue tr_queue;
-
 };

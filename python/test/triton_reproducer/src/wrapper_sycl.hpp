@@ -61,6 +61,8 @@ class tritonReproducer {
                           int threads_per_warp);
         template<typename T>
         void device2host(T *buffer, T *host_buffer, size_t size);
+        template <typename T>
+        void devCopyResults(void);
         sycl::queue getQueue(void) {return tr_queue;}
         void readArguments(void);
         std::string spvFileName = "./spirv-bins/good.spv";

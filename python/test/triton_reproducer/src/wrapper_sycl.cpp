@@ -184,6 +184,14 @@ void tritonReproducer::device2host(T *dev_buffer, T *host_buffer, size_t size) {
     getQueue().memcpy(host_buffer, dev_buffer, size).wait();
 }
 
+template <typename T>
+void tritonReproducer::devCopyResults(void) {
+    this->host_output = (T*) malloc(this->host_output_size * sizeof(T));
+    auto devData = (T*)this->dev_output;
+    // D2H - Transfer of C
+    this->device2host<T>(devData, (T*)this->host_output, this->host_output_size * sizeof(T));
+}
+
 sycl::nd_range<3> tritonReproducer::gridConfig(uint32_t gridX,
                                                uint32_t gridY,
                                                uint32_t gridZ,
@@ -358,10 +366,15 @@ int main(int argc, char **argv) {
 
     // Get output from the device memory.
     if (tr.type == FLOAT) {
-        tr.host_output = (float*) malloc(tr.host_output_size * sizeof(float));
-        auto devData = (float*)tr.dev_output;
-        // D2H - Transfer of C
-        tr.device2host<float>(devData, (float*)tr.host_output, tr.host_output_size * sizeof(float));
+        tr.devCopyResults<float>();
+    } else if (tr.type == INTEGER) {
+        tr.devCopyResults<int>();
+    } else if (tr.type == HALF) {
+        tr.devCopyResults<sycl::half>();
+    } else if (tr.type == LONG) {
+        tr.devCopyResults<long>();
+    } else if (tr.type == DOUBLE) {
+        tr.devCopyResults<double>();
     }
 
     auto torch_output = tr.file_ops<float>("./data/th.bin");

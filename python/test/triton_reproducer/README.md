@@ -36,6 +36,9 @@ This reproducer template program accepts an input file that includes input argum
 | VAR      | int       | 256 | 0 |
 | VAR      | int       | 256 | 0 |
 | SM       | int       | 32768 | 0 |
+
+| Arg Type | GridX | GridY | GridZ | num_warps | threads_per_warp |
+|----------|-------| ------|-------|-----------|------------------|
 | GDIM     | 1 | 1 | 1 | 8 | 32 |
 
 The table provided above describes the format of the input that the reproducer takes in order to derive the kernel input arguments in a generic manner.
@@ -48,7 +51,31 @@ The table provided above describes the format of the input that the reproducer t
 
 **GDIM**  - Global Grid Dimensions (GridX, GridY, GridZ, num_warps and Threads Per Warp)
 
-Example
+## Example
+Following is the content present in input.txt file
+
+ARRAY, half, ./data/a.bin, 0 
+
+ARRAY, half, ./data/b.bin, 0 
+
+ARRAY, float, ./data/th.bin, 1 
+
+VAR, int, 128, 0
+
+VAR, int, 256, 0
+
+VAR, int, 32, 0
+
+VAR, int, 32, 0
+
+VAR, int, 256, 0
+
+VAR, int, 256, 0
+
+SM, int, 32768, 0
+
+GDIM, 1, 1, 1, 8, 32
+
 
 # Reproducer Usage:
 

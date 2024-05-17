@@ -20,8 +20,10 @@
 #include <fstream>
 #include <sstream>
 #include <cstdint>
-#include <boost/type_index.hpp>
-
+#include <cxxabi.h>
+#include <memory>
+#include <cstdlib>
+#include <typeinfo>
 
 #define check(ans)                                                             \
   { do_check((ans), __FILE__, __LINE__); }

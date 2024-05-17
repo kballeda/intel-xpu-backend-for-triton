@@ -1,5 +1,27 @@
 #include "wrapper_sycl.hpp"
 
+// Function to demangle the type name
+std::string demangle(const char* name) {
+    int status = -1;
+    std::unique_ptr<char[], void(*)(void*)> res {
+        abi::__cxa_demangle(name, nullptr, nullptr, &status),
+        std::free
+    };
+    return (status == 0) ? res.get() : name;
+}
+
+template <typename T>
+std::string type_name() {
+    return demangle(typeid(T).name());
+}
+
+template <typename T> struct TypeIdentity { 
+    using type = T; 
+};
+
+template <typename T> std::string get_type_name() {
+    return type_name<typename TypeIdentity<T>::type>();
+}
 // File operations
 template<typename fp>
 std::vector<fp> tritonReproducer::file_ops(std::string filename) {
@@ -243,14 +265,12 @@ T* tritonReproducer::setupBuffers(int vidx) {
     auto host_mem = this->file_ops<T>(this->argInfo[vidx + 2]);
     auto dev_mem = this->allocateDevBuffer<T>(host_mem.size());
     auto arrType = stoi(this->argInfo[vidx + 3]);
-    // Review - Avoid boost
-    auto typeStr = boost::typeindex::type_id_with_cvr<T>().pretty_name();
-    //std::cout << typeStr << std::endl;
     // If this buffer is a output buffer 
     if (arrType) {
         this->dev_output = dev_mem;
         this->host_output_size = host_mem.size();
-        auto typeStr = boost::typeindex::type_id_with_cvr<T>().pretty_name();
+        auto typeStr = get_type_name<T>();
+        //std::cout << typeStr << std::endl;
         if (typeStr == "float")
             this->type = FLOAT;
         else if (typeStr == "integer")
@@ -297,8 +317,6 @@ int main(int argc, char **argv) {
         int narg = 0;
         while (vidx < tr.argInfo.size()) {
             if (tr.argInfo[vidx] == "ARRAY") {
-                //std::cout << tr.argInfo[vidx] << std::endl;
-                // Review: Use the same data type as the string in the input.txt
                 if (tr.argInfo[vidx + 1] == "float32") {
                     auto dev_mem = tr.setupBuffers<float>(vidx);
                     cgh.set_arg(narg++, dev_mem);

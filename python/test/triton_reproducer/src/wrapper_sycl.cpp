@@ -25,7 +25,7 @@ std::vector<fp> tritonReproducer::file_ops(std::string filename) {
 }
 
 void tritonReproducer::printHelp() {
-    std::cout << "Usage: gsd7949.exe [options]" << std::endl;
+    std::cout << "Usage: tritonspvc++.exe [options]" << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  -h, --help       Display this help message" << std::endl;
     std::cout << " -spv, --spv <good.spv/bad.spv> Default set to Good SPV file" << std::endl;
@@ -243,6 +243,7 @@ T* tritonReproducer::setupBuffers(int vidx) {
     auto host_mem = this->file_ops<T>(this->argInfo[vidx + 2]);
     auto dev_mem = this->allocateDevBuffer<T>(host_mem.size());
     auto arrType = stoi(this->argInfo[vidx + 3]);
+    // Review - Avoid boost
     auto typeStr = boost::typeindex::type_id_with_cvr<T>().pretty_name();
     //std::cout << typeStr << std::endl;
     // If this buffer is a output buffer 
@@ -295,19 +296,20 @@ int main(int argc, char **argv) {
         int argCnt = 0;
         int narg = 0;
         while (vidx < tr.argInfo.size()) {
-            if (tr.argInfo[vidx] == "Array") {
+            if (tr.argInfo[vidx] == "ARRAY") {
                 //std::cout << tr.argInfo[vidx] << std::endl;
-                if (tr.argInfo[vidx + 1] == "float") {
+                // Review: Use the same data type as the string in the input.txt
+                if (tr.argInfo[vidx + 1] == "float32") {
                     auto dev_mem = tr.setupBuffers<float>(vidx);
                     cgh.set_arg(narg++, dev_mem);
-                } else if (tr.argInfo[vidx + 1] == "half") {
+                } else if (tr.argInfo[vidx + 1] == "float16") {
                     auto dev_mem = tr.setupBuffers<sycl::half>(vidx);
                     cgh.set_arg(narg++, dev_mem);
-                } else if (tr.argInfo[vidx + 1] == "int") {
-                    auto dev_mem = tr.setupBuffers<int>(vidx);
+                } else if (tr.argInfo[vidx + 1] == "int8") {
+                    auto dev_mem = tr.setupBuffers<int8_t>(vidx);
                     cgh.set_arg(narg++, dev_mem);
                 } else if (tr.argInfo[vidx + 1] == "long") {
-                    auto dev_mem = tr.setupBuffers<int>(vidx);
+                    auto dev_mem = tr.setupBuffers<long>(vidx);
                     cgh.set_arg(narg++, dev_mem);
                 } else if (tr.argInfo[vidx + 1] == "int64") {
                     auto dev_mem = tr.setupBuffers<int64_t>(vidx);
@@ -318,10 +320,25 @@ int main(int argc, char **argv) {
                 } else if (tr.argInfo[vidx + 1] == "uint64") {
                     auto dev_mem = tr.setupBuffers<uint64_t>(vidx);
                     cgh.set_arg(narg++, dev_mem);
-                } 
+                } else if (tr.argInfo[vidx + 1] == "int16") {
+                    auto dev_mem = tr.setupBuffers<int16_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "int32") {
+                    auto dev_mem = tr.setupBuffers<int32_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "uint64") {
+                    auto dev_mem = tr.setupBuffers<uint64_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "uint8") {
+                    auto dev_mem = tr.setupBuffers<uint8_t>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                } else if (tr.argInfo[vidx + 1] == "float64") {
+                    auto dev_mem = tr.setupBuffers<double>(vidx);
+                    cgh.set_arg(narg++, dev_mem);
+                }
             }
 
-            if (tr.argInfo[vidx] == "Var") {
+            if (tr.argInfo[vidx] == "VAR") {
                 //std::cout << tr.argInfo[vidx] << std::endl;
                 if (tr.argInfo[vidx + 1] == "float") {
                     auto arg = stof(tr.argInfo[vidx + 2]);

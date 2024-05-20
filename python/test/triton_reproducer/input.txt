@@ -1,11 +1,11 @@
-ARRAY, float16, ./data/a.bin, 0 
-ARRAY, float16, ./data/b.bin, 0 
-ARRAY, float32, ./data/th.bin, 1 
-VAR, int, 128, 0
-VAR, int, 256, 0
-VAR, int, 32, 0
-VAR, int, 32, 0
-VAR, int, 256, 0
-VAR, int, 256, 0
+ARRAY, float16, ./data/a.bin, 0
+ARRAY, float16, ./data/b.bin, 0
+ARRAY, float16, ./data/th.bin, 1
+VAR, uint32, 128, 0
+VAR, uint32, 256, 0
+VAR, uint32, 32, 0
+VAR, uint32, 32, 0
+VAR, uint32, 256, 0
+VAR, uint32, 256, 0
 SM, int, 32768, 0
-GDIM, 1, 1, 1, 8, 32
+GDIM, 1, 1, 1, 8, 16

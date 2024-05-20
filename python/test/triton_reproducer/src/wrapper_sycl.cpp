@@ -363,7 +363,7 @@ int main(int argc, char **argv) {
                     //std::cout << arg << std::endl;
                     cgh.set_arg(narg++, arg);
                 }
-                if (tr.argInfo[vidx + 1] == "int") {
+                if (tr.argInfo[vidx + 1] == "uint32") {
                     auto arg = stoi(tr.argInfo[vidx + 2]);
                     //std::cout << arg << std::endl;
                     cgh.set_arg(narg++, arg);
@@ -415,8 +415,8 @@ int main(int argc, char **argv) {
         tr.devCopyResults<double>();
     }
 
-    auto torch_output = tr.file_ops<float>("./data/th.bin");
-    float *ptr = (float*)tr.host_output;
+    auto torch_output = tr.file_ops<sycl::half>("./data/th.bin");
+    sycl::half *ptr = (sycl::half*)tr.host_output;
     int idx = 0;
     for (int i = 0; i < tr.host_output_size; i++) {
         if (ptr[i] == torch_output[i])

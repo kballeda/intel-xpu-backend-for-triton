@@ -5,79 +5,47 @@ The Triton reproducer is designed to facilitate the creation of reproducers for 
 # Environment
     1. Setup oneAPI environment 
     2. Set PATH variable pointing to Intel Level Zero headers
+    3. git apply scripts/triton_reproducer/tt_reproducer.patch
 
-# Directories
+# Usage
+Automated generic reproducer creation is supported for only test_matmul.py case at present.
 
+    1. Update python/test/unit/operators/test_matmul.py to run a single case that requires reproducer
+    2. ./scripts/triton_reproducer/tt_reproducer.sh "python3 -m pytest --verbose --device xpu python/test/unit/operators/test_matmul.py" 
 
-data       - This directory contains all the binary files (.bin) consisting of input/output array binary data dumped from Triton backend 
-             [Arrays: a, b, Torch_output, Triton_output]
-src        - This directory contains all the source files 
-spirv-bins - This directory contains SPIRV binary dumps from Triton, these files contains actual kernels in encrypted form.
+Post running the step-2 above, generic reproducer output looks like below,
 
-# Reproducer Compilation
-make            - By default it builds the tritonspvc++.exe
+```
+/intel-xpu-backend-for-triton$ ./scripts/triton_reproducer/tt_reproducer.sh "python3 -m pytest --verbose --device xpu python/test/unit/operators/test_matmul.py" 
+==================================================== test session starts ====================================================
+platform linux -- Python 3.10.12, pytest-7.4.3, pluggy-1.3.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /intel-xpu-backend-for-triton/python
+plugins: rerunfailures-13.0, select-0.1.2, xdist-3.5.0
+collected 1 item                                                                                                            
 
-make VERBOSE=1  - Enables logging of Output Results
+python/test/unit/operators/test_matmul.py::test_op[128-256-32-1-8-2-None-None-None-False-False-float16-float16-None-True-None-float16] PASSED [100%]
 
-make DEBUG=1    - Enables debug mode
+==================================================== 1 passed in 28.35s =====================================================
+Processing file: /intel-xpu-backend-for-triton/tt_cache/9ab33bb9cd0339e3362384cf0d21b81201c37e699150f51f701f5562a9b85521/_kernel.spv
+icpx -std=c++20 -fsycl -lpthread -lm -ldl -lze_loader /intel-xpu-backend-for-triton/scripts/triton_reproducer/src/wrapper_sycl.cpp -o tritonspvc++.exe
+INPATH: /intel-xpu-backend-for-triton/scripts/triton_reproducer/
+Using spvFileName: /intel-xpu-backend-for-triton/scripts/triton_reproducer//data/kernel.spv
+Driver initialized.
+Found ZE_DEVICE_TYPE_GPU device...
+Driver version: 17002026
+API version: 1.3
+_kernel
+GPU Device Information:
+Name: Intel(R) Data Center GPU Max 1550
+KaliLog: kernel_name _kernelExpected Args 10
+ Total Elements = 32768 Total Matched Elements = 32768/32768
+```
 
-# Input Format
-This reproducer template program accepts an input file that includes input arguments and their format for a SPIRV kernel.
+Share scripts/triton_reproducer directory with IGC Team and they need to run following command to reproduce at their end.
+```
+./tritonspvc++.exe -spv ./data/kernel.spv
+```
 
-| Arg Type | Data Type | Input | Type of Buffer |
-|----------|-----------|-------|----------------|
-| ARRAY    | half      | ./data/a.bin | 0       | 
-| ARRAY    | half      | ./data/b.bin | 0       |
-| ARRAY    | float     | ./data/torch_output.bin | 1 |
-| VAR      | int       | 128 | 0 |
-| VAR      | int       | 256 | 0 |
-| VAR      | int       | 32 | 0 |
-| VAR      | int       | 32 | 0 |
-| VAR      | int       | 256 | 0 |
-| VAR      | int       | 256 | 0 |
-| SM       | int       | 32768 | 0 |
-
-| Arg Type | GridX | GridY | GridZ | num_warps | threads_per_warp |
-|----------|-------| ------|-------|-----------|------------------|
-| GDIM     | 1 | 1 | 1 | 8 | 32 |
-
-The table provided above describes the format of the input that the reproducer takes in order to derive the kernel input arguments in a generic manner.
-
-**ARRAY** - Input/Output buffers
-
-**VAR**   - Scalar variable
-
-**SM**    - Shared Memory Size
-
-**GDIM**  - Global Grid Dimensions (GridX, GridY, GridZ, num_warps and Threads Per Warp)
-
-## Example
-Following is the content present in input.txt file
-
-ARRAY, half, ./data/a.bin, 0 
-
-ARRAY, half, ./data/b.bin, 0 
-
-ARRAY, float, ./data/th.bin, 1 
-
-VAR, int, 128, 0
-
-VAR, int, 256, 0
-
-VAR, int, 32, 0
-
-VAR, int, 32, 0
-
-VAR, int, 256, 0
-
-VAR, int, 256, 0
-
-SM, int, 32768, 0
-
-GDIM, 1, 1, 1, 8, 32
-
-
-# Reproducer Usage:
-
-./tritonspvc++.exe [By default it picks ./spirv-bins/good.spv and input.txt from current directory]
-./tritonspvc++.exe --spv <path to SPIRV>
+# Known Issues
+Data type support may be limited and needs to be expanded.

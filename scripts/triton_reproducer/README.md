@@ -47,5 +47,6 @@ Share scripts/triton_reproducer directory with IGC Team and they need to run fol
 ./tritonspvc++.exe -spv ./data/kernel.spv
 ```
 
-# Known Issues
-Data type support may be limited and needs to be expanded.
+# Future Work
+  1. Data type support may be limited and needs to be expanded.
+  2. Support dot and other test cases on priority

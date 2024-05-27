@@ -141,7 +141,6 @@ def make_launcher(constants, signature, ids):
     #include <iomanip>
     #include <level_zero/ze_api.h>
     #include <sycl/sycl.hpp>
-    #include <fstream>
 
     #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
     #include <Python.h>
@@ -232,18 +231,14 @@ def make_launcher(constants, signature, ids):
           int index,
           size_t size,
           const void* value) {{
-      std::ofstream file("./python/test/triton_reproducer/data/input.txt", std::ios::app);
       switch (size) {{
       case sizeof(uint8_t):
-      file << "VAR, uint8, " << *static_cast<const uint8_t*>(value) << ", 0" << std::endl; 
       cgh.set_arg(index, *static_cast<const uint8_t*>(value));
       break;
       case sizeof(uint16_t):
-      file << "VAR, uint16, " << *static_cast<const uint16_t*>(value) << ", 0" << std::endl; 
       cgh.set_arg(index, *static_cast<const uint16_t*>(value));
       break;
       case sizeof(uint32_t):
-      file << "VAR, uint32, " << *static_cast<const uint32_t*>(value) << ", 0" << std::endl; 
       cgh.set_arg(index, *static_cast<const uint32_t*>(value));
       break;
       case sizeof(uint64_t):
@@ -252,7 +247,6 @@ def make_launcher(constants, signature, ids):
       default:
       assert(false && "wrong scalar size in sycl gen.");
       }}
-      file.close();
   }}
   static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ, int num_warps, int threads_per_warp, int shared_memory, sycl::queue& stream, sycl::kernel& kernel_ptr {', ' + arg_decls if len(arg_decls) > 0 else ''}) {{
 
@@ -280,10 +274,6 @@ def make_launcher(constants, signature, ids):
           using share_mem_t = sycl::local_accessor<int8_t, 1>;
           share_mem_t local_buffer = share_mem_t(shared_memory, cgh);
           cgh.set_arg(num_params, local_buffer);
-          std::ofstream file("./python/test/triton_reproducer/data/input.txt", std::ios::app);
-          file << "SM, int, " << shared_memory << ", 0" << std::endl; 
-          file << "GDIM, " << gridX << ", " << gridY << ", " << gridZ << ", " << num_warps << ", " << threads_per_warp << std::endl;
-          file.close();
           cgh.parallel_for(parallel_work_size, kernel_ptr);
       }} else {{
           cgh.parallel_for(parallel_work_size, kernel_ptr);

@@ -24,6 +24,7 @@
 #include <memory>
 #include <cstdlib>
 #include <typeinfo>
+#include <tuple>
 
 #define check(ans)                                                             \
   { do_check((ans), __FILE__, __LINE__); }
@@ -73,6 +74,8 @@ class tritonReproducer {
         size_t host_output_size;
         enum DataType type;
         void *host_output;
+        template <typename T>
+        std::tuple<int,int> compareResults(void);
     private:
         sycl::queue tr_queue;
 };

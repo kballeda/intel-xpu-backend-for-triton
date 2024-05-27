@@ -287,6 +287,22 @@ T* tritonReproducer::setupBuffers(int vidx) {
     return dev_mem;
 }
 
+template<typename T>
+std::tuple<int, int> tritonReproducer::compareResults(void) {
+    auto torch_output = this->file_ops<T>("./data/th.bin");
+    T *ptr = (T*) this->host_output;
+    int idx = 0;
+    for (int i = 0; i < this->host_output_size; i++) {
+        if (ptr[i] == torch_output[i])
+            idx++;
+        else {
+            std::cout << "Mismatch Occured at " << i << std::endl;
+            break;
+        }
+    }
+    return std::make_tuple(idx,torch_output.size());
+}
+
 int main(int argc, char **argv) {
     tritonReproducer tr;
     // Default set to good SPV file
@@ -402,29 +418,25 @@ int main(int argc, char **argv) {
     });
     tr.getQueue().wait();
 
+    int matchIdx = 0;
+    int torch_output_size = 0;
     // Get output from the device memory.
     if (tr.type == FLOAT) {
         tr.devCopyResults<float>();
+        std::tie(matchIdx, torch_output_size) = tr.compareResults<float>();
     } else if (tr.type == INTEGER) {
         tr.devCopyResults<int>();
+        std::tie(matchIdx, torch_output_size) = tr.compareResults<int>();
     } else if (tr.type == HALF) {
         tr.devCopyResults<sycl::half>();
+        std::tie(matchIdx, torch_output_size) = tr.compareResults<sycl::half>();
     } else if (tr.type == LONG) {
         tr.devCopyResults<long>();
+        std::tie(matchIdx, torch_output_size) = tr.compareResults<long>();
     } else if (tr.type == DOUBLE) {
         tr.devCopyResults<double>();
+        std::tie(matchIdx, torch_output_size) = tr.compareResults<double>();
     }
 
-    auto torch_output = tr.file_ops<sycl::half>("./data/th.bin");
-    sycl::half *ptr = (sycl::half*)tr.host_output;
-    int idx = 0;
-    for (int i = 0; i < tr.host_output_size; i++) {
-        if (ptr[i] == torch_output[i])
-            idx++;
-        else {
-            std::cout << "Mismatch Occured at " << i << std::endl;
-            break;
-        }
-    }
-    std::cout << " Total Elements = " << torch_output.size() << " Total Matched Elements = " << idx << "/" << tr.host_output_size << std::endl;
+    std::cout << " Total Elements = " << torch_output_size << " Total Matched Elements = " << matchIdx << "/" << tr.host_output_size << std::endl;
 }

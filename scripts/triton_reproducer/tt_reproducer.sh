@@ -4,6 +4,7 @@ PWD=$(pwd)
 TT_CACHE_DIR=$(pwd)/tt_cache
 export TRITON_CACHE_DIR=$PWD/tt_cache
 export MLIR_ENABLE_DUMP=1
+export INPATH=$PWD/scripts/triton_reproducer/
 
 if [ -d "$TT_CACHE_DIR" ]; then
     rm -rf "$TT_CACHE_DIR"

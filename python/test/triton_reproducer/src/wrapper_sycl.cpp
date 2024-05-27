@@ -233,7 +233,7 @@ sycl::nd_range<3> tritonReproducer::gridConfig(uint32_t gridX,
 }
 
 void tritonReproducer::readArguments(void) {
-    std::ifstream inputFile("input.txt"); // Open the input file
+    std::ifstream inputFile("./data/input.txt"); // Open the input file
     if (!inputFile) { // Check if the file is opened successfully
         std::cerr << "Failed to open the file." << std::endl;
         exit(1);

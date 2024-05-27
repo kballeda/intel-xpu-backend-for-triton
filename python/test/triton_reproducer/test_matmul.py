@@ -104,16 +104,7 @@ def test_op(BLOCK_M, BLOCK_N, BLOCK_K, SPLIT_K, NWARP, NSTAGE, M, N, K, AT, BT, 
     acc_dtype = getattr(torch, ACC_DTYPE) if ACC_DTYPE else ab_dtype
     output_dtype = getattr(torch, OUTPUT_DTYPE) if OUTPUT_DTYPE else ab_dtype
     th_c = torch.matmul(th_a.to(output_dtype), th_b.to(output_dtype))
-    try:
-        if is_fp8(ADTYPE):
-            a = triton.reinterpret(a, getattr(tl, ADTYPE))
-        if is_fp8(BDTYPE):
-            b = triton.reinterpret(b, getattr(tl, BDTYPE))
-        tt_c = triton.ops.matmul(a, b, acc_dtype if ACC_DTYPE else None, INPUT_PRECISION, F8_FASTACCUM, output_dtype)
-        torch.testing.assert_close(th_c, tt_c)
-    except triton.OutOfResources as e:
-        pytest.skip(str(e))
-    
+    # File Dumps
     a_host = a.cpu()
     b_host = b.cpu()
     torch_host = th_c.cpu()
@@ -149,3 +140,13 @@ def test_op(BLOCK_M, BLOCK_N, BLOCK_K, SPLIT_K, NWARP, NSTAGE, M, N, K, AT, BT, 
         f.write("ARRAY, ")
         f.write(OUTPUT_DTYPE)
         f.write(", ./data/th.bin, 1\n")
+    try:
+        if is_fp8(ADTYPE):
+            a = triton.reinterpret(a, getattr(tl, ADTYPE))
+        if is_fp8(BDTYPE):
+            b = triton.reinterpret(b, getattr(tl, BDTYPE))
+        tt_c = triton.ops.matmul(a, b, acc_dtype if ACC_DTYPE else None, INPUT_PRECISION, F8_FASTACCUM, output_dtype)
+        torch.testing.assert_close(th_c, tt_c)
+    except triton.OutOfResources as e:
+        pytest.skip(str(e))
+    

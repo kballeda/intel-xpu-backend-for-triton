@@ -272,10 +272,6 @@ def make_launcher(constants, signature, ids):
     if (shared_memory) {{
       expected_num_params -= 1;
     }}
-    std::ofstream file("./python/test/triton_reproducer/data/input.txt", std::ios::app);
-    file << "GDIM, " << gridX << ", " << gridY << ", " << gridZ << ", " << num_warps << ", " << threads_per_warp << std::endl;
-    file << "SM, int, " << shared_memory << ", 0" << std::endl; 
-    file.close();
     assert(num_params == expected_num_params && "number of kernel param not matched");
     // Submit the imported kernel.
     auto cgf = [&](sycl::handler &cgh) {{
@@ -284,6 +280,10 @@ def make_launcher(constants, signature, ids):
           using share_mem_t = sycl::local_accessor<int8_t, 1>;
           share_mem_t local_buffer = share_mem_t(shared_memory, cgh);
           cgh.set_arg(num_params, local_buffer);
+          std::ofstream file("./python/test/triton_reproducer/data/input.txt", std::ios::app);
+          file << "SM, int, " << shared_memory << ", 0" << std::endl; 
+          file << "GDIM, " << gridX << ", " << gridY << ", " << gridZ << ", " << num_warps << ", " << threads_per_warp << std::endl;
+          file.close();
           cgh.parallel_for(parallel_work_size, kernel_ptr);
       }} else {{
           cgh.parallel_for(parallel_work_size, kernel_ptr);

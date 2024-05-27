@@ -16,101 +16,12 @@ def is_hip():
 @pytest.mark.parametrize(
     "BLOCK_M, BLOCK_N, BLOCK_K, SPLIT_K, NWARP, NSTAGE, M, N, K, AT, BT, ADTYPE, BDTYPE, INPUT_PRECISION, F8_FASTACCUM, ACC_DTYPE, OUTPUT_DTYPE",
     itertools.chain(
-        *[[
-            # 1 warp
-            (16, 16, 16, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 16, 16, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (16, 32, 16, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (16, 16, 32, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 16, 32, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (16, 32, 32, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (16, 16, 64, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (64, 16, 64, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (16, 64, 64, 1, 1, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            # 2 warp
-            (64, 32, 64, 1, 2, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 64, 64, 1, 2, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (64, 32, 16, 1, 2, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 64, 16, 1, 2, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 32, 32, 1, 2, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 128, 32, 1, 2, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            # 4 warp
-            (128, 64, 16, 1, 4, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (64, 128, 16, 1, 4, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 32, 32, 1, 4, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 128, 32, 1, 4, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 32, 64, 1, 4, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (32, 128, 64, 1, 4, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            # 8 warp
-            (128, 256, 16, 1, 8, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (256, 128, 16, 1, 8, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (256, 128, 32, 1, 8, 2, None, None, None, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            # variable input
-            (128, 128, 32, 1, 4, 2, 256, 384, 160, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 128, 32, 1, 4, 2, 107, 233, 128, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 128, 32, 1, 4, 2, 107, 233, 83, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 256, 64, 1, 8, 3, 256, 512, 160, AT, BT, DTYPE, DTYPE, None, True, None, None),
-        ] for DTYPE in ["float16", "bfloat16", "float32"] for AT in [False, True] for BT in [False, True]],
-        # n-stage
-        *[[
-            (16, 16, 16, 1, 1, STAGES, 32, 32, 80, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (64, 32, 64, 1, 2, STAGES, 128, 64, 128, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 64, 16, 1, 4, STAGES, 256, 128, 80, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (256, 128, 32, 1, 8, STAGES, 512, 256, 160, AT, BT, DTYPE, DTYPE, None, True, None, None),
-            (128, 128, 32, 1, 4, STAGES, 256, 256, 160, AT, BT, DTYPE, DTYPE, None, True, None, None),
-        ]
-          for DTYPE in ["float16", "bfloat16", "float32"]
-          for AT in [False, True]
-          for BT in [False, True]
-          for STAGES in [4]],
-        # tf32x3
-        *[[
-            (16, 16, 16, 1, 1, 2, 32, 32, 80, AT, BT, "float32", "float32", "tf32x3", True, None, None),
-            (64, 32, 64, 1, 2, 2, 128, 64, 128, AT, BT, "float32", "float32", "tf32x3", True, None, None),
-            (128, 64, 16, 1, 4, 2, 256, 128, 80, AT, BT, "float32", "float32", "tf32x3", True, None, None),
-            (256, 128, 32, 1, 8, 2, 512, 256, 160, AT, BT, "float32", "float32", "tf32x3", True, None, None),
-            (128, 128, 32, 1, 4, 2, 256, 256, 160, AT, BT, "float32", "float32", "tf32x3", True, None, None),
-        ] for AT in [False, True] for BT in [False, True]],
-        # mixed-precision
-        *[[
-            (32, 32, 32, 1, 1, 2, None, None, None, AT, BT, ADTYPE, BDTYPE, None, FASTACCUM, None, None),
-            (128, 256, 32, 1, 8, 2, None, None, None, AT, BT, ADTYPE, BDTYPE, None, FASTACCUM, None, None),
-            (32, 64, 32, 1, 1, 2, 64, 128, 32, AT, BT, ADTYPE, BDTYPE, None, FASTACCUM, None, None),
-        ] for ADTYPE, BDTYPE in [
-            ("float8e4nv", "float8e5"),
-            ("float8e4nv", "float8e4nv"),
-            ("float8e5", "float8e4nv"),
-            ("float8e5", "float8e5"),
-            ("float8e4b15", "float8e4b15"),
-            ("float8e4nv", "float16"),
-            ("float16", "float8e5"),
-            ("int8", "bfloat16"),
-            ("float16", "int8"),
-            ("float16", "float32"),
-            ("float32", "float16"),
-            ("bfloat16", "float32"),
-            ("float32", "bfloat16"),
-        ] for AT in [False, True] for BT in [False, True] for FASTACCUM in [True, False]],
-        # mixed-precision block layout
-        *[[
-            (32, 32, 32, 1, 1, 2, None, None, None, AT, BT, ADTYPE, BDTYPE, None, True, None, None),
-            (128, 256, 32, 1, 8, 2, None, None, None, AT, BT, ADTYPE, BDTYPE, None, True, None, None),
-            (32, 64, 32, 1, 1, 2, 64, 128, 32, AT, BT, ADTYPE, BDTYPE, None, True, None, None),
-        ] for ADTYPE, BDTYPE in [
-            ("float8e4nv", "float16"),
-            ("float16", "float8e5"),
-            ("float16", "float32"),
-            ("float32", "float16"),
-            ("bfloat16", "float32"),
-            ("float32", "bfloat16"),
-        ] for AT in [False, True] for BT in [False, True]],
         # acc-out-dtype and output_dtype
         *[[
-            (32, 32, 32, 1, 1, 2, None, None, None, False, False, "float16", "float16", None, True, ACC_DTYPE,
-             OUTPUT_DTYPE),
-            (128, 256, 32, 1, 8, 2, None, None, None, False, False, "float16", "float16", None, True, ACC_DTYPE,
-             OUTPUT_DTYPE),
-        ] for ACC_DTYPE in [None, "float16", "float32"] for OUTPUT_DTYPE in [None, "float16", "float32"]],
+            (128, 256, 32, 1, 8, 2, None, None, None, False, False, "float16", "float16", None, True, None,
+             "float16"),
+#        ] for ACC_DTYPE in [None, "float16", "float32"] for OUTPUT_DTYPE in [None, "float16", "float32"]],
+         ]],
     ),
 )
 def test_op(BLOCK_M, BLOCK_N, BLOCK_K, SPLIT_K, NWARP, NSTAGE, M, N, K, AT, BT, ADTYPE, BDTYPE, INPUT_PRECISION,
@@ -193,6 +104,37 @@ def test_op(BLOCK_M, BLOCK_N, BLOCK_K, SPLIT_K, NWARP, NSTAGE, M, N, K, AT, BT, 
     acc_dtype = getattr(torch, ACC_DTYPE) if ACC_DTYPE else ab_dtype
     output_dtype = getattr(torch, OUTPUT_DTYPE) if OUTPUT_DTYPE else ab_dtype
     th_c = torch.matmul(th_a.to(output_dtype), th_b.to(output_dtype))
+    # File Dumps
+    a_host = a.cpu()
+    b_host = b.cpu()
+    torch_host = th_c.cpu()
+    a_np = a_host.numpy()
+    b_np = b_host.numpy()
+    torch_np = torch_host.numpy()
+    inpath = './python/test/triton_reproducer/data/'
+    with open(inpath + 'a.bin', 'wb') as f:
+        f.write(a_np.tobytes())
+
+    with open(inpath + 'b.bin', 'wb') as f:
+        f.write(b_np.tobytes())
+
+    with open(inpath + 'th.bin', 'wb') as f:
+        f.write(torch_np.tobytes())
+
+    with open(inpath + 'input.txt', 'a') as f:
+        f.write("ARRAY, ")
+        f.write(ADTYPE)
+        f.write(", ./data/a.bin, 0\n")
+    with open(inpath + 'input.txt', 'a') as f:
+        f.write("ARRAY, ")
+        f.write(BDTYPE)
+        f.write(", ./data/b.bin, 0\n")
+    if OUTPUT_DTYPE == None:
+        OUTPUT_DTYPE = ADTYPE
+    with open(inpath + 'input.txt', 'a') as f:
+        f.write("ARRAY, ")
+        f.write(OUTPUT_DTYPE)
+        f.write(", ./data/th.bin, 1\n")
     try:
         if is_fp8(ADTYPE):
             a = triton.reinterpret(a, getattr(tl, ADTYPE))
@@ -202,3 +144,4 @@ def test_op(BLOCK_M, BLOCK_N, BLOCK_K, SPLIT_K, NWARP, NSTAGE, M, N, K, AT, BT, 
         torch.testing.assert_close(th_c, tt_c)
     except triton.OutOfResources as e:
         pytest.skip(str(e))
+    

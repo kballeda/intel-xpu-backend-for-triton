@@ -9,6 +9,85 @@
 #include <vector>
 
 #include "sycl_functions.h"
+#include "json.hpp"
+using json = nlohmann::json;
+
+struct argsDict {
+    int gridX;
+    int gridY;
+    int gridZ;
+    int num_ctas;
+    int num_stages;
+    int num_warps;
+    int threads_per_warp;
+    int shared_memory;
+    std::string kernel_name;
+    std::string spv_name;
+    std::vector<torch::Tensor> tensor_vector;
+
+    argsDict(int gX =0, int gY = 0, int gZ = 0, int ctas = 0,
+            int stages = 0, int warps = 0, int tpw = 0,int sm = 0) 
+            : gridX(gX), gridY(gY), gridZ(gZ), num_ctas(ctas), num_stages(stages),
+            num_warps(warps), threads_per_warp(tpw), shared_memory(sm) {}
+    
+    void addTensor(const torch::Tensor& tensor) {
+        tensor_vector.push_back(tensor);
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const argsDict& container) {
+    os << "gridX: " << container.gridX << "\n"
+       << "gridY: " << container.gridY << "\n"
+       << "gridZ: " << container.gridZ << "\n"
+       << "num_ctas: " << container.num_ctas << "\n"
+       << "threads_per_warp: " << container.threads_per_warp << "\n"
+       << "shared_memory: " << container.shared_memory << "\n"
+       << "kernel_name: " << container.kernel_name << "\n"
+       << "spv_name: " << container.spv_name << "\n"
+       << "num_warps: " << container.num_warps << "\n"; 
+
+    // Print the tensors
+    //os << "Tensors:\n";
+    //for (const auto& tensor : container.tensor_vector) {
+    //    os << tensor << "\n";  // Prints the tensor
+    //}
+
+    return os;  // Return the stream object to allow chaining
+}
+
+argsDict parseArgsJson(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open JSON file");
+    } 
+
+    json jsonData;
+    try {
+        file >> jsonData;
+    } catch (const json::parse_error& e) {
+        std::cerr << "Parsing error :-" << e.what() << std::endl;
+        throw;
+    }
+    file.close();
+
+    argsDict triton_args;
+    try {
+        triton_args.gridX = jsonData.value("gridX", 0);
+        triton_args.gridY = jsonData.value("gridY", 0);
+        triton_args.gridZ = jsonData.value("gridZ", 0);
+        triton_args.num_ctas = jsonData.value("num_ctas", 0);
+        triton_args.num_stages = jsonData.value("num_stages", 0);
+        triton_args.num_warps = jsonData.value("num_warps", 0);
+        triton_args.shared_memory = jsonData.value("shared_memory", 0);
+        triton_args.threads_per_warp = jsonData.value("threads_per_warp", 0);
+        triton_args.kernel_name = jsonData.value("kernel_name", " ");
+        triton_args.spv_name = jsonData.value("spv_name", " ");
+    } catch (const json::exception& e) {
+        std::cerr << "Error parsing JSON data: " << e.what() << std::endl;    
+    }
+
+  return triton_args;
+}
 
 // Create an exception handler for asynchronous SYCL exceptions
 static auto exception_handler = [](sycl::exception_list e_list) {
@@ -29,15 +108,27 @@ auto load_tensor(const std::string &filename) {
   if (!ins.is_open()) {
     throw std::runtime_error("Failed to open file " + filename);
   }
-
-  ins.seekg(0, std::ios::end);
-  auto fileSize = ins.tellg();
-
-  std::vector<char> bytes(fileSize);
-  ins.seekg(0, std::ios::beg);
-  ins.read(bytes.data(), fileSize);
-
-  return torch::pickle_load(bytes).toTensor();
+  std::vector<char> buffer((std::istreambuf_iterator<char>(ins)), std::istreambuf_iterator<char>());
+  std::cout << "Done with loading and now doing torch_pickle_load" <<std::endl;
+  std::cout << "Buffer Name: " << filename << std::endl;
+  try {
+      auto ivalue = torch::pickle_load(buffer);
+      if (ivalue.isTensor()) {
+        auto tensor = ivalue.toTensor();
+        std::cout << "Tensor Loaded - \n" << filename << std::endl;
+        std::cout << "Tensor\n" << tensor << std::endl;
+        return tensor;
+      } else { 
+        std::cerr << "Error: Loaded object is not a tensor " << std::endl;
+        exit(1);
+      }
+  } catch (const c10::Error& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    exit(1);
+  }
+  
+  
+  //return torch::pickle_load(bytes).toTensor();
 }
 
 void write_tensor(const std::string &filename, torch::Tensor &tensor) {
@@ -183,11 +274,10 @@ static void set_scalar_arg(sycl::handler &cgh, int index, size_t size,
 static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ,
                                int num_warps, int threads_per_warp,
                                int shared_memory, sycl::queue &stream,
-                               sycl::kernel &kernel_ptr, void *arg0, void *arg1,
-                               void *arg2, int32_t arg3) {
+                               sycl::kernel &kernel_ptr, void *arg0, void *arg1) {
   std::string kernel_name =
       kernel_ptr.get_info<sycl::info::kernel::function_name>();
-  void *params[] = {&arg0, &arg1, &arg2, &arg3};
+  void *params[] = {&arg0, &arg1};
   uint32_t num_params = sizeof(params) / sizeof(params[0]);
   uint32_t expected_num_params =
       kernel_ptr.get_info<sycl::info::kernel::num_args>();
@@ -210,8 +300,6 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ,
   auto cgf = [&](sycl::handler &cgh) {
     set_scalar_arg(cgh, 0, sizeof(void *), params[0]);
     set_scalar_arg(cgh, 1, sizeof(void *), params[1]);
-    set_scalar_arg(cgh, 2, sizeof(void *), params[2]);
-    set_scalar_arg(cgh, 3, sizeof(int32_t), params[3]);
     if (shared_memory) {
       using share_mem_t = sycl::local_accessor<int8_t, 1>;
       share_mem_t local_buffer = share_mem_t(shared_memory, cgh);
@@ -226,21 +314,19 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ,
   stream.wait();
 }
 
-at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
+at::Tensor  launchKernel(sycl::queue stream, sycl::kernel kernel,
                         const torch::Tensor &a, const torch::Tensor &b) {
-  int gridX = 97;
+  int gridX = 1;
   int gridY = 1;
   int gridZ = 1;
 
-  int num_warps = 4;
+  int num_warps = 8;
   int num_ctas = 1;
   int shared_memory = 0;
   int threads_per_warp = 32;
 
-  int _arg3 = 98432;
-
   torch::Tensor output = torch::zeros(
-      {a.sizes()[0]}, c10::nullopt, at::TensorOptions{c10::ScalarType::Float});
+      {b.sizes()[0]}, c10::nullopt, at::TensorOptions{c10::ScalarType::Float});
   std::cout << "Tensor output: " << output.sizes() << ", "
             << output.scalar_type() << " (" << output.nbytes() << " bytes)"
             << std::endl;
@@ -251,7 +337,6 @@ at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
 
   auto a_dev = sycl::malloc_device<char>(a.nbytes(), stream);
   auto b_dev = sycl::malloc_device<char>(b.nbytes(), stream);
-  auto output_dev = sycl::malloc_device<char>(output.nbytes(), stream);
 
   stream.submit([&](sycl::handler &cgh) {
     cgh.memcpy(a_dev, tensor_ptr(a), a.nbytes());
@@ -259,25 +344,22 @@ at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
   stream.submit([&](sycl::handler &cgh) {
     cgh.memcpy(b_dev, tensor_ptr(b), b.nbytes());
   });
-  stream.submit([&](sycl::handler &cgh) {
-    cgh.memcpy(output_dev, tensor_ptr(output), output.nbytes());
-  });
   stream.wait();
 
   sycl_kernel_launch(gridX, gridY, gridZ, num_warps, threads_per_warp,
-                     shared_memory, stream, kernel, a_dev, b_dev, output_dev,
-                     _arg3);
+                     shared_memory, stream, kernel, a_dev, b_dev);
 
   // copy back
   stream.submit([&](sycl::handler &cgh) {
-    cgh.memcpy(tensor_ptr(output), output_dev, output.nbytes());
+    cgh.memcpy(tensor_ptr(output), b_dev, b.nbytes());
   });
   stream.wait();
-
+  std::cout << "a Tensor Printed: " << std::endl;
+  std::cout << output << std::endl;
   return output;
 }
 
-int main() {
+int main(int argc, char **argv) {
   // initialize sycl runtime
   sycl::queue q = sycl::queue(sycl::gpu_selector_v, exception_handler);
 
@@ -286,19 +368,23 @@ int main() {
   initContext(&q);
   initDevices(&q);
 
-  auto a = load_tensor("x.pt");
-  auto b = load_tensor("y.pt");
+  auto tritonArgDict = parseArgsJson(argv[1]);
+  std::cout << tritonArgDict;
+
+  auto a = load_tensor("tensor_9.pt");
+  auto b = load_tensor("tensor_10.pt");
+  
   std::cout << "Tensor a: " << a.sizes() << ", " << a.scalar_type() << " ("
             << a.nbytes() << " bytes)" << std::endl;
   std::cout << "Tensor b: " << b.sizes() << ", " << b.scalar_type() << " ("
             << b.nbytes() << " bytes)" << std::endl;
-
+  
   // read spirv
-  auto spirv = read_spirv("add_kernel.spv");
+  auto spirv = read_spirv(tritonArgDict.spv_name);
   std::cout << "Read " << spirv.size() << " byte kernel." << std::endl;
 
   auto [kernel_bundle, kernel, n_regs, n_spills] =
-      loadBinary("add_kernel", reinterpret_cast<uint8_t *>(spirv.data()),
+      loadBinary(tritonArgDict.kernel_name, reinterpret_cast<uint8_t *>(spirv.data()),
                  spirv.size() / sizeof(uint32_t), 0);
 
   // TODO: missing number of registers
@@ -307,5 +393,6 @@ int main() {
 
   auto output = launchKernel(q, kernel, a, b);
   std::cout << "Kernel return output: " << output[0] << std::endl;
+
   write_tensor("cpp_outs.pt", output);
 }

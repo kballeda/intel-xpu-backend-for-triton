@@ -5,6 +5,9 @@ import shutil
 import tempfile
 from pathlib import Path
 from functools import cached_property
+import torch
+import re
+import json
 
 from triton.runtime.build import _build
 from triton.runtime.cache import get_cache_manager
@@ -271,7 +274,7 @@ def make_launcher(constants, signature, ids):
       ptr_info.dev_ptr = 0;
       ptr_info.valid = true;
       if (PyLong_Check(obj)) {{
-        ptr_info.dev_ptr = PyLong_AsVoidPtr(obj);
+        ptr_info.dev_ptr = (void*) PyLong_AsLongLong(obj);
         checkDevicePointer(&ptr_info, idx, queue);
         return ptr_info;
       }}
@@ -290,7 +293,7 @@ def make_launcher(constants, signature, ids):
           ptr_info.valid = false;
           return ptr_info;
         }}
-        ptr_info.dev_ptr = PyLong_AsVoidPtr(ret);
+        ptr_info.dev_ptr = (void*) PyLong_AsLongLong(ret);
         if(!ptr_info.dev_ptr) {{
           return ptr_info;
         }}
@@ -434,6 +437,56 @@ def make_launcher(constants, signature, ids):
     """
     return src
 
+# TODO: Add it as part of debug/verbose macro
+def kernel_meta_extractor(kmeta_str, args_dict):
+    num_ctas = re.search(r'num_ctas=(\d+)', kmeta_str).group(1)
+    num_stages = re.search(r'num_stages=(\d+)', kmeta_str).group(1)
+    kernel_name = re.findall(r'name=\'([^\']+)\'', kmeta_str)
+    num_warps = re.search(r'num_warps=(\d+)',kmeta_str).group(1)
+    threads_per_warp = re.search(r'threads_per_warp=(\d+)',kmeta_str).group(1)
+    shared_memory = re.search(r'shared=(\d+)',kmeta_str).group(1)
+    hash = re.search(r'hash=\'([^\']+)\'',kmeta_str).group(1)
+    args_dict.update({"num_ctas": int(num_ctas)})
+    args_dict.update({'num_stages': int(num_stages)})
+    args_dict.update({'num_warps': int(num_warps)})
+    args_dict.update({'threads_per_warp': int(threads_per_warp)})
+    args_dict.update({'shared_memory': int(shared_memory)})
+    args_dict.update({'hash': hash})
+    for name in kernel_name:
+        if name != "intel":
+            args_dict.update({'kernel_name':name})
+            spvname = f"{name}.spv"
+            args_dict.update({"spv_name": spvname})
+    return args_dict
+    
+# TODO: Add it as part of a debug/verbose macro
+def serialize_args(args):
+    import pickle
+    print(len(args))
+    cnt = 0
+    args_dict = {
+        "gridX": args[cnt],
+        "gridY": args[cnt + 1],
+        "gridZ": args[cnt + 2]
+    }
+    print(f"Printing preprocessing of data of Triton kernel: \n")
+    for arg in args:
+        if type(arg).__name__ == "KernelMetadata":
+            args_dict = kernel_meta_extractor(str(arg), args_dict)
+        
+        if type(arg).__name__ == "Tensor":
+            print(f"Tensor data at argument  {cnt}\n")
+            cpu_tensor = arg.cpu()
+            print(cpu_tensor)
+            with open(f"tensor_{cnt}.pt", 'wb') as f:
+                torch.save(cpu_tensor, f)
+            tensor_type = arg.dtype
+            tensor_name = f"tensor_{cnt}"
+            args_dict.update({tensor_name: str(tensor_type)})
+        cnt = cnt + 1           
+    # Dump argument info as a JSON file
+    with open('args_data.json', 'w') as json_file:
+        json.dump(args_dict, json_file, indent=4)
 
 class XPULauncher(object):
 
@@ -448,7 +501,18 @@ class XPULauncher(object):
         self.launch = mod.launch
 
     def __call__(self, *args, **kwargs):
+        # TODO: add this call as part of debug/verbose
+        serialize_args(args)
         self.launch(*args, **kwargs)
+        print("Kali Output: Post Processing Data\n")
+        cnt = 0
+        for arg in args:
+            if type(arg).__name__ == "Tensor":
+                print(f"Printing argument at index = {cnt}\n")
+                cpu_tensor = arg.cpu()
+                print(cpu_tensor)
+            cnt = cnt + 1
+
 
 
 class XPUDriver(DriverBase):

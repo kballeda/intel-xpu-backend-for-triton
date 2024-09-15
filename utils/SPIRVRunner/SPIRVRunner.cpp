@@ -28,6 +28,7 @@ struct argsDict {
     std::string spv_name;
     std::vector<torch::Tensor> tensor_vec;
     std::vector<std::string> ttype_vec;
+    std::tuple<int, std::string> outTensorProp;
 
     argsDict(int gX =0, int gY = 0, int gZ = 0, int ctas = 0,
             int stages = 0, int warps = 0, int tpw = 0,int sm = 0) 
@@ -53,13 +54,13 @@ std::ostream& operator<<(std::ostream& os, const argsDict& container) {
        << "kernel_name: " << container.kernel_name << "\n"
        << "spv_name: " << container.spv_name << "\n"
        << "num_warps: " << container.num_warps << "\n"; 
-
+#if _DEBUG
     // Print the tensors
-    //os << "Tensors:\n";
-    //for (const auto& tensor : container.tensor_vector) {
-    //    os << tensor << "\n";  // Prints the tensor
-    //}
-
+    os << "Tensors:\n";
+    for (const auto& tensor : container.tensor_vector) {
+        os << tensor << "\n";  // Prints the tensor
+    }
+#endif
     return os;  // Return the stream object to allow chaining
 }
 
@@ -74,32 +75,27 @@ int extractNumber(const std::string& key) {
 }
 
 auto load_tensor(const std::string &filename) {
-  std::ifstream ins(filename, std::ios::binary);
-  if (!ins.is_open()) {
-    throw std::runtime_error("Failed to open file " + filename);
-  }
-  std::vector<char> buffer((std::istreambuf_iterator<char>(ins)), std::istreambuf_iterator<char>());
-  std::cout << "Done with loading and now doing torch_pickle_load" <<std::endl;
-  std::cout << "Buffer Name: " << filename << std::endl;
-  try {
-      auto ivalue = torch::pickle_load(buffer);
-      if (ivalue.isTensor()) {
-        auto tensor = ivalue.toTensor();
-        //std::cout << "Tensor Loaded - \n" << filename << std::endl;
-        //std::cout << "Tensor\n" << tensor << std::endl;
-        return tensor;
-      } else { 
-        std::cerr << "Error: Loaded object is not a tensor " << std::endl;
-        exit(1);
-      }
-  } catch (const c10::Error& e) {
-    std::cerr << "Error: " << e.what() << std::endl;
-    exit(1);
-  }
-  //return torch::pickle_load(bytes).toTensor();
+    std::ifstream ins(filename, std::ios::binary);
+    if (!ins.is_open()) {
+      throw std::runtime_error("Failed to open file " + filename);
+    }
+    std::vector<char> buffer((std::istreambuf_iterator<char>(ins)), std::istreambuf_iterator<char>());
+    try {
+        auto ivalue = torch::pickle_load(buffer);
+        if (ivalue.isTensor()) {
+          auto tensor = ivalue.toTensor();
+          return tensor;
+        } else { 
+          std::cerr << "Error: Loaded object is not a tensor " << std::endl;
+          exit(1);
+        }
+    } catch (const c10::Error& e) {
+      std::cerr << "Error: " << e.what() << std::endl;
+      exit(1);
+    }
 }
 
-argsDict parseArgsJson(const std::string& filename) {
+argsDict parseArgsJson(const std::string& filename, const std::string& outtensorname) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open JSON file");
@@ -146,6 +142,11 @@ argsDict parseArgsJson(const std::string& filename) {
             std::string tsname = key+".pt";
             auto tensor = load_tensor(tsname.c_str());
             triton_args.addTensor(tensor);
+            if (tsname == outtensorname) {
+                std::get<0>(triton_args.outTensorProp) = triton_args.tensor_vec.size() - 1;
+                std::get<1>(triton_args.outTensorProp) = triton_args.ttype_vec.back();
+                std::cout << "Kali: Setting up the tuple" << outtensorname << " : " << tsname << ":" << std::get<0>(triton_args.outTensorProp) << "," << std::get<1>(triton_args.outTensorProp) << std::endl;
+            }
         }
     } catch (const json::exception& e) {
         std::cerr << "Error parsing JSON data: " << e.what() << std::endl;    
@@ -360,6 +361,15 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ,
   stream.wait();
 }
 
+at::TensorOptions getTensorOptions(const std::string& dtype) {
+    if (dtype == "torch.float32") {
+        return at::TensorOptions{c10::ScalarType::Float};
+        std::cout << "dtype is foutn to be float" << std::endl;
+    } else if (dtype == "torch.float64") {
+        return at::TensorOptions{c10::ScalarType::Double};
+    }
+}
+
 at::Tensor  launchKernel(sycl::queue stream, sycl::kernel kernel,
                         argsDict triton_args) {
 
@@ -374,8 +384,14 @@ at::Tensor  launchKernel(sycl::queue stream, sycl::kernel kernel,
       stream.memcpy(dev, tensor_ptr(tensor), tensor.nbytes()).wait();
   }
 
-  torch::Tensor output = torch::zeros(
-      {triton_args.tensor_vec[1].sizes()[0]}, c10::nullopt, at::TensorOptions{c10::ScalarType::Float});
+  auto outTensorIndex = std::get<0>(triton_args.outTensorProp);
+  auto outTensorType = std::get<1>(triton_args.outTensorProp);
+  //torch::Tensor output = torch::zeros(
+  //    {triton_args.tensor_vec[outTensorIndex].sizes()[0]}, c10::nullopt, 
+  //    //at::TensorOptions{c10::ScalarType::Float}
+  //    getTensorOptions(outTensorType)
+  //    );
+  auto output = torch::zeros({triton_args.tensor_vec[outTensorIndex].size(0)}, getTensorOptions(outTensorType));
       std::cout << "Tensor output: " << output.sizes() << ", "
             << output.scalar_type() << " (" << output.nbytes() << " bytes)"
             << std::endl;
@@ -395,6 +411,12 @@ at::Tensor  launchKernel(sycl::queue stream, sycl::kernel kernel,
 }
 
 int main(int argc, char **argv) {
+
+  if (argc < 3) {
+      std::cout << "<Executable> <ArgsJSON> <Output Tensor File Name>" << std::endl;
+      std::cout << "./build/SPIRVRunner data.json tensor_10.pt" << std::endl;
+      return -1;
+  }
   // initialize sycl runtime
   sycl::queue q = sycl::queue(sycl::gpu_selector_v, exception_handler);
 
@@ -403,7 +425,7 @@ int main(int argc, char **argv) {
   initContext(&q);
   initDevices(&q);
 
-  auto tritonArgDict = parseArgsJson(argv[1]);
+  auto tritonArgDict = parseArgsJson(argv[1], argv[2]);
   //std::cout << tritonArgDict;
 
   // read spirv

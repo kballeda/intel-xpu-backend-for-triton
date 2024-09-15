@@ -461,7 +461,6 @@ def kernel_meta_extractor(kmeta_str, args_dict):
     
 # TODO: Add it as part of a debug/verbose macro
 def serialize_args(args):
-    import pickle
     print(len(args))
     cnt = 0
     args_dict = {
@@ -500,10 +499,11 @@ class XPULauncher(object):
         mod = compile_module_from_src(src, "__triton_launcher")
         self.launch = mod.launch
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs):    
         # TODO: add this call as part of debug/verbose
         serialize_args(args)
         self.launch(*args, **kwargs)
+        
         print("Kali Output: Post Processing Data\n")
         cnt = 0
         for arg in args:

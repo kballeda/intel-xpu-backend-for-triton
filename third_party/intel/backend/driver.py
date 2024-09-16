@@ -316,6 +316,7 @@ def make_launcher(constants, signature, ids):
     void *params[] = {{ {', '.join(f"&arg{i}" for i in signature.keys() if i not in constants)} }};
     uint32_t num_params = sizeof(params)/sizeof(params[0]);
     uint32_t expected_num_params = kernel_ptr.get_info<sycl::info::kernel::num_args>();
+    std::cout << "Kali: " << num_params << "Expected Num Params: " << expected_num_params << std::endl;
     size_t global_range_x = gridX*threads_per_warp*num_warps;
     size_t global_range_y = gridY;
     size_t global_range_z = gridZ;
@@ -468,8 +469,10 @@ def serialize_args(args):
         "gridY": args[cnt + 1],
         "gridZ": args[cnt + 2]
     }
+    
     print(f"Printing preprocessing of data of Triton kernel: \n")
     for arg in args:
+        print(f"Kali_Arg_Name: {type(arg).__name__} {cnt}\n")
         if type(arg).__name__ == "KernelMetadata":
             args_dict = kernel_meta_extractor(str(arg), args_dict)
         
@@ -482,7 +485,17 @@ def serialize_args(args):
             tensor_type = arg.dtype
             tensor_name = f"tensor_{cnt}"
             args_dict.update({tensor_name: str(tensor_type)})
-        cnt = cnt + 1           
+            '''
+            if isinstance(args[cnt+1],int) and isinstance(args[cnt+2], int):
+                if args[cnt+1] > 1:
+                    args_dict.update({f"intArg_{cnt}":args[cnt+1]})
+                elif args[cnt+2] > 1:
+                    args_dict.update({f"intArg_{cnt}":args[cnt+2]})
+            elif isinstance(args[cnt+1],int):
+                args_dict.update({f"intArg_{cnt}":args[cnt+1]})
+            '''
+        cnt = cnt + 1
+    print(args_dict)           
     # Dump argument info as a JSON file
     with open('args_data.json', 'w') as json_file:
         json.dump(args_dict, json_file, indent=4)
@@ -499,7 +512,8 @@ class XPULauncher(object):
         mod = compile_module_from_src(src, "__triton_launcher")
         self.launch = mod.launch
 
-    def __call__(self, *args, **kwargs):    
+    def __call__(self, *args, **kwargs):
+        print(args)    
         # TODO: add this call as part of debug/verbose
         serialize_args(args)
         self.launch(*args, **kwargs)
@@ -512,6 +526,7 @@ class XPULauncher(object):
                 cpu_tensor = arg.cpu()
                 print(cpu_tensor)
             cnt = cnt + 1
+        
 
 
 

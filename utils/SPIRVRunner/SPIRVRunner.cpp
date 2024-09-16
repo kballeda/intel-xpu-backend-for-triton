@@ -16,6 +16,7 @@
 using json = nlohmann::json;
 using ordered_json = nlohmann::ordered_json;
 
+// Structure that contains Triton kernel arguments
 struct argsDict {
     int gridX;
     int gridY;

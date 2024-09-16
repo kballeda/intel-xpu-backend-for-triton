@@ -469,9 +469,9 @@ def serialize_args(args):
         "gridY": args[cnt + 1],
         "gridZ": args[cnt + 2]
     }
-    
+    cnt = 4
     print(f"Printing preprocessing of data of Triton kernel: \n")
-    for arg in args:
+    for arg in args[4:]:
         print(f"Kali_Arg_Name: {type(arg).__name__} {cnt}\n")
         if type(arg).__name__ == "KernelMetadata":
             args_dict = kernel_meta_extractor(str(arg), args_dict)
@@ -485,15 +485,9 @@ def serialize_args(args):
             tensor_type = arg.dtype
             tensor_name = f"tensor_{cnt}"
             args_dict.update({tensor_name: str(tensor_type)})
-            '''
-            if isinstance(args[cnt+1],int) and isinstance(args[cnt+2], int):
-                if args[cnt+1] > 1:
-                    args_dict.update({f"intArg_{cnt}":args[cnt+1]})
-                elif args[cnt+2] > 1:
-                    args_dict.update({f"intArg_{cnt}":args[cnt+2]})
-            elif isinstance(args[cnt+1],int):
-                args_dict.update({f"intArg_{cnt}":args[cnt+1]})
-            '''
+        
+        if isinstance(arg, int):
+            args_dict.update({f"intArg_{cnt}":args[cnt]})
         cnt = cnt + 1
     print(args_dict)           
     # Dump argument info as a JSON file

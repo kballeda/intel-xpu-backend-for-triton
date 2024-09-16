@@ -167,9 +167,12 @@ argsDict parseArgsJson(const std::string& filename, const std::string& outtensor
             }
         }
 
+        int idx = 0;
         // Add tensor int args
-        for (const auto& key : tensor_iarg_keys) {
-            triton_args.addTensorIarg(jsonData[key].get<int>());
+        while (idx < tensor_iarg_keys.size()) {
+            auto val = jsonData[tensor_iarg_keys[idx]].get<int>() * jsonData[tensor_iarg_keys[idx+1]].get<int>();
+            triton_args.addTensorIarg(val);
+            idx += 2;
         }
 
     } catch (const json::exception& e) {
@@ -320,7 +323,9 @@ static void set_scalar_arg(sycl::handler &cgh, int index, size_t size,
     cgh.set_arg(index, *static_cast<const uint16_t *>(value));
     break;
   case sizeof(uint32_t):
+    std::cout << "About to set the argument " << std::endl;
     cgh.set_arg(index, *static_cast<const uint32_t *>(value));
+    std::cout << "Done setting argument " << std::endl;
     break;
   case sizeof(uint64_t):
     cgh.set_arg(index, *static_cast<const uint64_t *>(value));
@@ -337,7 +342,8 @@ static void sycl_kernel_launch(uint32_t gridX, uint32_t gridY, uint32_t gridZ,
   std::string kernel_name =
       kernel_ptr.get_info<sycl::info::kernel::function_name>();
   
-  uint32_t num_params = sizeof(params) / sizeof(params[0]);
+  uint32_t num_params = params.size();
+  std::cout << "num_params" << num_params << std::endl;
   uint32_t expected_num_params =
       kernel_ptr.get_info<sycl::info::kernel::num_args>();
   
@@ -424,10 +430,12 @@ at::Tensor  launchKernel(sycl::queue stream, sycl::kernel kernel,
   std::vector<void*> params;
   int intIdx = 0;
   int tensorIdx = 0;
-    for (; it != triton_args.jsonData.end(); ++it) {
+  for (; it != triton_args.jsonData.end(); ++it) {
       auto value = it.value();
       if (value.is_number_integer()) {
           std::cout << value << std::endl;
+          if (value == 1)
+            continue;
           params.push_back(static_cast<void*>(&triton_args.tensor_iarg_vec[intIdx]));
           intIdx++;
       } else if (value.is_string()) {
@@ -436,6 +444,8 @@ at::Tensor  launchKernel(sycl::queue stream, sycl::kernel kernel,
           tensorIdx++;
       }
   }
+
+  std::cout << "Kali: Total number of arguments <int,tensor> " << intIdx << ", " << tensorIdx << std::endl;
 
   sycl_kernel_launch(triton_args.gridX, triton_args.gridY, triton_args.gridZ, triton_args.num_warps, triton_args.threads_per_warp,
                      triton_args.shared_memory, stream, kernel, params);
@@ -473,7 +483,7 @@ int main(int argc, char **argv) {
 #if _DEBUG
   std::cout << tritonArgDict;
 #endif
-
+#if 1
   // read spirv
   auto spirv = read_spirv(tritonArgDict.spv_name);
   std::cout << "Read " << spirv.size() << " byte kernel." << std::endl;
@@ -490,5 +500,5 @@ int main(int argc, char **argv) {
   std::cout << "Kernel return output: " << output[0] << std::endl;
 
   write_tensor("cpp_outs.pt", output);
-
+#endif
 }

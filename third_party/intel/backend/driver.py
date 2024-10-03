@@ -443,14 +443,19 @@ def serialize_kernel_metadata(arg, args_dict):
     args_dict['spv_name'] = f"{arg.name}.spv"
 
 
-def serialize_args(args):
+def serialize_args(args, constants, signature):
     import numbers
     dir_path = os.getenv('TRITON_XPU_DUMP_SPIRV_KERNEL_ARGS')
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
         print(f"Path to directory consisting of SPIR-V Runner data: {dir_path}")
+
     cnt = 0
+    karg_cnt = 0
+    tensor_cnt = 0
+    scalar_cnt = 0
     args_dict = {"gridX": args[cnt], "gridY": args[cnt + 1], "gridZ": args[cnt + 2]}
+    args_dict['argument_list'] = []
     cnt = 4
     for arg in args[cnt:]:
         if type(arg).__name__ == "KernelMetadata":
@@ -458,40 +463,31 @@ def serialize_args(args):
 
         if type(arg).__name__ == "Tensor":
             cpu_tensor = arg.cpu()
-            tensor_path = os.path.join(dir_path, f"tensor_{cnt}.pt")
+            tensor_path = os.path.join(dir_path, f"tensor_{tensor_cnt}.pt")
             with open(tensor_path, 'wb') as f:
                 import torch
                 torch.save(cpu_tensor, f)
-            args_dict[f"tensor_{cnt}"] = str(arg.dtype)
+            new_arg = {
+                "name": f"tensor_{tensor_cnt}", "type": "tensor", "dtype": "torch.float32", "ctype": signature[karg_cnt]
+            }
+            args_dict['argument_list'].append(new_arg)
+            karg_cnt += 1
+            tensor_cnt += 1
 
         if isinstance(arg, numbers.Number):
-            args_dict[f"scalarArg_{cnt}"] = args[cnt]
-
-        cnt = cnt + 1
+            if karg_cnt not in constants:
+                new_arg = {
+                    "name": f"scalarArg_{scalar_cnt}", "type": "scalar", "value": args[cnt], "ctype": signature[karg_cnt]
+                }
+                args_dict['argument_list'].append(new_arg)
+            karg_cnt += 1
+            scalar_cnt += 1
+        cnt += 1
     # Dump argument info as a JSON file
     json_path = os.path.join(dir_path, 'args_data.json')
     with open(json_path, 'w') as json_file:
         import json
         json.dump(args_dict, json_file, indent=4)
-
-
-def serialize_signature(constants, signature):
-    lconst = constants
-    lsign = signature
-    # Delete the keys from signature dict based
-    # on keys presence in constant dictionary
-    # Dump kernel signature information in JSON format
-    for key in lconst:
-        if key in lsign:
-            del lsign[key]
-    dir_path = os.getenv('TRITON_XPU_DUMP_SPIRV_KERNEL_ARGS')
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-        print(f"Path to directory consisting of SPIR-V Runner data: {dir_path}")
-    json_path = os.path.join(dir_path, 'signature.json')
-    with open(json_path, 'w') as json_file:
-        import json
-        json.dump(lsign, json_file, indent=4)
 
 
 class XPULauncher(object):
@@ -500,21 +496,18 @@ class XPULauncher(object):
         ids = {"ids_of_const_exprs": src.fn.constexprs if hasattr(src, "fn") else tuple()}
         constants = src.constants if hasattr(src, "constants") else dict()
         cst_key = lambda i: src.fn.arg_names.index(i) if isinstance(i, str) else i
-        constants = {cst_key(key): value for key, value in constants.items()}
-        signature = {cst_key(key): value for key, value in src.signature.items()}
-        src = make_launcher(constants, signature, ids)
+        self.constants = {cst_key(key): value for key, value in constants.items()}
+        self.signature = {cst_key(key): value for key, value in src.signature.items()}
+        src = make_launcher(self.constants, self.signature, ids)
         mod = compile_module_from_src(src, "__triton_launcher")
         self.launch = mod.launch
-        serialize_args = os.getenv('TRITON_XPU_DUMP_SPIRV_KERNEL_ARGS', None)
-        if serialize_args:
-            serialize_signature(constants, signature)
 
     def __call__(self, *args, **kwargs):
         self.launch(*args, **kwargs)
         # Serialize KernelArguments for SPIR-V Runner
         serialize_kernel_args = os.getenv('TRITON_XPU_DUMP_SPIRV_KERNEL_ARGS', None)
         if serialize_kernel_args:
-            serialize_args(args)
+            serialize_args(args, self.constants, self.signature)
 
 
 class XPUDriver(DriverBase):

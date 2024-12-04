@@ -47,9 +47,10 @@ auto read_spirv(const std::string &filename) {
   return read_file_as_bytes(filename);
 }
 
+// Host output tensor buffers and indexes
 struct TensorBuffer {
-    torch::Tensor buffer_ptr;
-    size_t index;
+  torch::Tensor buffer_ptr;
+  size_t index;
 };
 
 // Structure that contains Triton kernel arguments
@@ -333,7 +334,8 @@ at::TensorOptions getTensorOptions(const std::string &dtype) {
 }
 
 std::vector<TensorBuffer> launchKernel(sycl::queue stream, sycl::kernel kernel,
-                        KernelArguments triton_args, bool get_kernel_time) {
+                                       KernelArguments triton_args,
+                                       bool get_kernel_time) {
 
   auto tensor_ptr = [](const torch::Tensor &t) -> void * {
     return static_cast<void *>(t.data_ptr());
@@ -356,16 +358,18 @@ std::vector<TensorBuffer> launchKernel(sycl::queue stream, sycl::kernel kernel,
         if (std::find(triton_args.out_tensor_names.begin(),
                       triton_args.out_tensor_names.end(),
                       item.at("name").get<std::string>()) !=
-                      triton_args.out_tensor_names.end()) {
+            triton_args.out_tensor_names.end()) {
           TensorBuffer tb;
-          tb.buffer_ptr = torch::zeros(
-              {tensor.sizes()}, getTensorOptions(item.at("dtype")));
+          tb.buffer_ptr = torch::zeros({tensor.sizes()},
+                                       getTensorOptions(item.at("dtype")));
           tb.index = triton_args.dev_buffers.size() - 1;
           triton_args.host_outbuffers.push_back(tb);
-          std::cout << "Tensor output: " << triton_args.host_outbuffers.back().buffer_ptr.sizes()
-                    << ", " << triton_args.host_outbuffers.back().buffer_ptr.scalar_type() << " ("
-                    << triton_args.host_outbuffers.back().buffer_ptr.nbytes() << " bytes)"
-                    << std::endl;
+          std::cout
+              << "Tensor output: "
+              << triton_args.host_outbuffers.back().buffer_ptr.sizes() << ", "
+              << triton_args.host_outbuffers.back().buffer_ptr.scalar_type()
+              << " (" << triton_args.host_outbuffers.back().buffer_ptr.nbytes()
+              << " bytes)" << std::endl;
         }
       }
     } else {
@@ -378,12 +382,12 @@ std::vector<TensorBuffer> launchKernel(sycl::queue stream, sycl::kernel kernel,
 
   for (auto &item : triton_args.host_outbuffers) {
     stream
-      .memcpy(tensor_ptr(item.buffer_ptr),
-              triton_args.dev_buffers.at(item.index),
-              item.buffer_ptr.nbytes())
-      .wait_and_throw();
+        .memcpy(tensor_ptr(item.buffer_ptr),
+                triton_args.dev_buffers.at(item.index),
+                item.buffer_ptr.nbytes())
+        .wait_and_throw();
   }
-  
+
   for (auto *dev_ptr : triton_args.dev_buffers) {
     if (dev_ptr)
       sycl::free(dev_ptr, stream);
@@ -431,7 +435,8 @@ int main(int argc, char **argv) {
         launchKernel(q, kernel, tritonArgDict, cliopts.get_kernel_time);
 
     for (auto &item : output_tensors) {
-      auto output_tensor = tritonArgDict.spirv_dump_dir + "/cpp_outs_" + std::to_string(item.index) + ".pt";
+      auto output_tensor = tritonArgDict.spirv_dump_dir + "/cpp_outs_" +
+                           std::to_string(item.index) + ".pt";
       write_tensor(output_tensor, item.buffer_ptr);
       std::cout << "Output Tensor Path: " << output_tensor << std::endl;
     }

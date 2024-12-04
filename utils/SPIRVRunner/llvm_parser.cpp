@@ -1,8 +1,10 @@
 #include "llvm_parser.h"
 
-llvm::cl::list<std::string>
-    output_tensors("o", llvm::cl::desc("<Specify Output Tensor Name>"),
-                  llvm::cl::CommaSeparated);
+llvm::cl::list<std::string> output_tensors(
+    "o",
+    llvm::cl::desc(
+        "<Specify Output Tensor Names (Ex: -o tensor_1,tensor_2 or skip)>"),
+    llvm::cl::CommaSeparated);
 llvm::cl::opt<bool>
     enable_profiling("p", llvm::cl::desc("Enable kernel time profiling"),
                      llvm::cl::init(false));

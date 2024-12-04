@@ -47,6 +47,11 @@ auto read_spirv(const std::string &filename) {
   return read_file_as_bytes(filename);
 }
 
+struct TensorBuffer {
+    torch::Tensor buffer_ptr;
+    size_t index;
+};
+
 // Structure that contains Triton kernel arguments
 struct KernelArguments {
   int gridX;
@@ -62,11 +67,11 @@ struct KernelArguments {
   std::string spv_name;
   ordered_json jsonData;
   std::vector<char *> dev_buffers;
-  torch::Tensor host_outbuffer;
-  std::string out_tensor_name;
+  std::vector<TensorBuffer> host_outbuffers;
+  std::vector<std::string> out_tensor_names;
   std::string spirv_dump_dir;
 
-  KernelArguments(const std::string &outtensorname) {
+  KernelArguments(const std::vector<std::string> &outtensornames) {
     // Check if the triton_xpu_dump path exists if not point to current
     // directory
     auto env_path = std::getenv("TRITON_XPU_DUMP_SPIRV_KERNEL_ARGS");
@@ -97,7 +102,7 @@ struct KernelArguments {
     build_flags = jsonData.at("build_flags");
     spv_name =
         spirv_dump_dir + "/" + jsonData.at("spv_name").get<std::string>();
-    out_tensor_name = outtensorname;
+    out_tensor_names = outtensornames;
   }
 };
 
@@ -348,13 +353,19 @@ at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
             .wait_and_throw();
 
         // Configure output tensor
-        if (item.at("name").get<std::string>() == triton_args.out_tensor_name) {
-          devout_idx = triton_args.dev_buffers.size() - 1;
-          triton_args.host_outbuffer = torch::zeros(
+        //if (item.at("name").get<std::string>() == triton_args.out_tensor_name) {
+        if (std::find(triton_args.out_tensor_names.begin(),
+                      triton_args.out_tensor_names.end(),
+                      item.at("name").get<std::string>()) !=
+                      triton_args.out_tensor_names.end()) {
+          TensorBuffer tb;
+          tb.buffer_ptr = torch::zeros(
               {tensor.sizes()}, getTensorOptions(item.at("dtype")));
-          std::cout << "Tensor output: " << triton_args.host_outbuffer.sizes()
-                    << ", " << triton_args.host_outbuffer.scalar_type() << " ("
-                    << triton_args.host_outbuffer.nbytes() << " bytes)"
+          tb.index = triton_args.dev_buffers.size() - 1;
+          triton_args.host_outbuffers.push_back(tb);
+          std::cout << "Tensor output: " << triton_args.host_outbuffers.back().buffer_ptr.sizes()
+                    << ", " << triton_args.host_outbuffers.back().buffer_ptr.scalar_type() << " ("
+                    << triton_args.host_outbuffers.back().buffer_ptr.nbytes() << " bytes)"
                     << std::endl;
         }
       }
@@ -362,31 +373,35 @@ at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
       throw std::runtime_error("Type entry is missing in JSON argument_list");
     }
   }
-
+/*
   if (!triton_args.host_outbuffer.defined()) {
     std::string message = "Output tensor isn't configured; \
         the second positional parameter is ";
     throw std::runtime_error(message + triton_args.out_tensor_name);
   }
+*/
 
   // Launch SYCL kernel
   sycl_kernel_launch(stream, kernel, triton_args, get_kernel_time);
 
-  // copy back
-  stream
-      .memcpy(tensor_ptr(triton_args.host_outbuffer),
-              triton_args.dev_buffers.at(devout_idx),
-              triton_args.host_outbuffer.nbytes())
+  for (auto &item : triton_args.host_outbuffers) {
+    stream
+      .memcpy(tensor_ptr(item.buffer_ptr),
+              triton_args.dev_buffers.at(item.index),
+              item.buffer_ptr.nbytes())
       .wait_and_throw();
-
+  }
+  
   for (auto *dev_ptr : triton_args.dev_buffers) {
     if (dev_ptr)
       sycl::free(dev_ptr, stream);
     else
       throw std::runtime_error("sycl::free failed \n");
   }
-
-  return triton_args.host_outbuffer;
+  if (triton_args.host_outbuffers.size() >= 1)
+    return triton_args.host_outbuffers.at(0).buffer_ptr;
+  else
+    return torch::zeros({0}, torch::kFloat32);
 }
 
 int main(int argc, char **argv) {
@@ -409,7 +424,7 @@ int main(int argc, char **argv) {
     initDevices(&q);
 
     // Parse the JSON file and create argument dictionary
-    KernelArguments tritonArgDict(cliopts.output_tensor);
+    KernelArguments tritonArgDict(cliopts.output_tensors);
 
     // read spirv
     auto spirv = read_spirv(tritonArgDict.spv_name);

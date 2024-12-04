@@ -353,7 +353,6 @@ std::vector<TensorBuffer> launchKernel(sycl::queue stream, sycl::kernel kernel,
             .wait_and_throw();
 
         // Configure output tensor
-        //if (item.at("name").get<std::string>() == triton_args.out_tensor_name) {
         if (std::find(triton_args.out_tensor_names.begin(),
                       triton_args.out_tensor_names.end(),
                       item.at("name").get<std::string>()) !=

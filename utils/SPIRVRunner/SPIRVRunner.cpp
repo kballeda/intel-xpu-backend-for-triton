@@ -332,7 +332,7 @@ at::TensorOptions getTensorOptions(const std::string &dtype) {
   }
 }
 
-at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
+std::vector<TensorBuffer> launchKernel(sycl::queue stream, sycl::kernel kernel,
                         KernelArguments triton_args, bool get_kernel_time) {
 
   auto tensor_ptr = [](const torch::Tensor &t) -> void * {
@@ -373,13 +373,6 @@ at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
       throw std::runtime_error("Type entry is missing in JSON argument_list");
     }
   }
-/*
-  if (!triton_args.host_outbuffer.defined()) {
-    std::string message = "Output tensor isn't configured; \
-        the second positional parameter is ";
-    throw std::runtime_error(message + triton_args.out_tensor_name);
-  }
-*/
 
   // Launch SYCL kernel
   sycl_kernel_launch(stream, kernel, triton_args, get_kernel_time);
@@ -398,10 +391,7 @@ at::Tensor launchKernel(sycl::queue stream, sycl::kernel kernel,
     else
       throw std::runtime_error("sycl::free failed \n");
   }
-  if (triton_args.host_outbuffers.size() >= 1)
-    return triton_args.host_outbuffers.at(0).buffer_ptr;
-  else
-    return torch::zeros({0}, torch::kFloat32);
+  return triton_args.host_outbuffers;
 }
 
 int main(int argc, char **argv) {
@@ -438,12 +428,14 @@ int main(int argc, char **argv) {
     std::cout << "Loaded kernel with " << n_regs << " registers and "
               << n_spills << " register spills." << std::endl;
 
-    auto output =
+    auto output_tensors =
         launchKernel(q, kernel, tritonArgDict, cliopts.get_kernel_time);
 
-    auto output_tensor = tritonArgDict.spirv_dump_dir + "/cpp_outs.pt";
-    write_tensor(output_tensor, output);
-    std::cout << "Output Tensor Path: " << output_tensor << std::endl;
+    for (auto &item : output_tensors) {
+      auto output_tensor = tritonArgDict.spirv_dump_dir + "/cpp_outs_" + std::to_string(item.index) + ".pt";
+      write_tensor(output_tensor, item.buffer_ptr);
+      std::cout << "Output Tensor Path: " << output_tensor << std::endl;
+    }
   } catch (const std::runtime_error &e) {
     std::cerr << "Error: " << e.what() << std::endl;
     return EXIT_FAILURE;
